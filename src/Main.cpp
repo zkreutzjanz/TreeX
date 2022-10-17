@@ -3,13 +3,18 @@
 #include <fstream>
 #include <vector>
 #include <algorithm>
+#include <cstring>
 using namespace std;
 
 string fancyDisplayBoxes(vector<string> headers,int width);
 
 string stringNTimes(string input,int count);
 class Family;
-void startup();
+void startup(string in);
+/**
+ * @brief I created this class before any knowledge of dataypes, it is a type of tree
+ * Each node has a tag and body, with n subnodes. A subnode can only be added to end of node list.
+ */
 class atr{
 	private:
 		vector<atr> subAtr;
@@ -49,6 +54,9 @@ class atr{
 		}
 };
 
+/**
+ * @brief Manages data parsing from standard gedcom format
+ */
 class dataEntry{
 	
 	public:
@@ -121,8 +129,10 @@ class dataEntry{
 		
 };
 
-class Person;
-
+/**
+ * @brief Manages a person, with person atr tree, pointer to family(as child), and vector of family(as spouse)
+ * 
+ */
 class Person{
 	private:
 		vector<atr> personAtrs;
@@ -169,7 +179,7 @@ class Person{
 			val.push_back(id);
 			val.push_back(getBodyFromAtrList({"NAME"}));
 			val.push_back(getBodyFromAtrList({"BIRT","DATE"}));
-			
+			return val;
 		}
 		
 	    string getBodyFromAtrList(vector<string> atrList){
@@ -206,22 +216,27 @@ class Person{
 		}
 		string getSimpleProfile(){
 			string val = "";
-			 for(atr myAtr : personAtrs){
+			int nc=0;
+			for(atr myAtr : personAtrs){
 				if(myAtr.getTag()=="NAME"){
-					 val = val+myAtr.getBody()+", ";
+					if(nc) val += ",";
+					val += myAtr.getBody();
+					nc++;
 				}
-			 }
-			 val = val+": ";
-			 for(atr myAtr : personAtrs){
+			}
+			for(atr myAtr : personAtrs){
 				if(myAtr.getTag()=="BIRT"){
+					val = val+" B: ";
 					for(atr mySubAtr : myAtr.getSubAtrs()){
 						if(mySubAtr.getTag()=="DATE"){
-							val = val+mySubAtr.getBody()+", ";
+							val+=mySubAtr.getBody();
+						}
+						if(mySubAtr.getTag()=="PLAC"){
+							val+="("+mySubAtr.getBody()+")";
 						}
 					}
 				}
-			 }
-			 val = val;
+			}
 			 
 			return val;
 		}
@@ -238,6 +253,10 @@ class Person{
 		
 };
 
+/**
+ * @brief Stores a family with husband and wife pointers, and vector of children pointers
+ * 
+ */
 class Family{
 	
 	private:
@@ -293,6 +312,10 @@ class Family{
 		}
 };
 
+/**
+ * @brief A tree, manages loading data and data view
+ * 
+ */
 class genealogicalTree{
 	private:
 		string sourceFileName;
@@ -314,6 +337,7 @@ class genealogicalTree{
 
 			ifstream myFile;
 			myFile.open(sourceFileName);
+			//cout<<sourceFileName<<"\n";
 			string line;
 			while( getline (myFile,line)){
 				dataEntry temp = dataEntry();
@@ -321,15 +345,26 @@ class genealogicalTree{
 				// new dataEntry().parseLine(); ??
 				importedLines.push_back(temp);
 			}
+			cout<<importedLines.size()<<"\n";
 		}
 		
 		void createUnlinkedTree(){
 			Person currentPerson = Person();
 			Family currentFamily = Family();
 			string currentType = "";
+			//cout<<importedLines.size()<<"\n";
 			for(dataEntry line : importedLines){
 				if(line.numeral==0){
 					currentType=line.body;
+					if(currentType.find_first_not_of(' ')!=string::npos){
+						
+						currentType.erase(0,currentType.find_first_not_of(' '));
+					}
+					
+					if(currentType.find_last_not_of(' ')!=string::npos){
+						currentType.erase(currentType.find_last_not_of(' '),currentType.size()-currentType.find_last_not_of(' ')-1);
+					}
+					
 					if(currentType=="INDI"){
 						people.push_back(currentPerson);
 						currentPerson.clear();
@@ -347,6 +382,8 @@ class genealogicalTree{
 					}
 				}
 			}
+			//cout<<families.size()<<"\n";
+			//cout<<people.size()<<"\n";
 		}
 		
 		void linkTreeObjects(){
@@ -357,7 +394,7 @@ class genealogicalTree{
 						people[i].addFAMS(&families[j]);
 						families[j].setHUSB(&people[i]);
 						//cout<<"  HUSB: "<<people[i].getID()<<"\n";
-						//cout<<"  HUSB: "<<fam.getHUSB()->getID()<<"\n";
+						//cout<<"  HUSB: "<<families[j].getHUSB()->getID()<<"\n";
 					}else 
 					if(people[i].getID()==families[j].getWID()){
 						people[i].addFAMS(&families[j]);
@@ -385,9 +422,10 @@ class genealogicalTree{
 				if(p->getFAMC()){if(p->getFAMC()->getHID()!=""){
 				    val += generateAncestryView(p->getFAMC()->getHUSB(),base+air,branch,leaf,air,1);
 				}}
-				val = val+"\n"+base+leaf+p->getID()+": "+p->getBodyFromAtrList({"NAME"});
+				val += "\n"+base+leaf+p->getProfileWithID();
+				//val += "\n"+base+leaf+p->getID()+": "+p->getBodyFromAtrList({"NAME"});
 				if(p->getFAMC()){if(p->getFAMC()->getWID()!=""){
-					val = val+ generateAncestryView(p->getFAMC()->getWIFE(),base+air,branch,leaf,air,0);
+					val += generateAncestryView(p->getFAMC()->getWIFE(),base+air,branch,leaf,air,0);
 				}}
 				
 			}else if(gend==1){
@@ -395,9 +433,9 @@ class genealogicalTree{
 				if(p->getFAMC()){if(p->getFAMC()->getHID()!=""){
 				    val += generateAncestryView(p->getFAMC()->getHUSB(),base+air,branch,leaf,air,1);
 				}}
-				val = val+"\n"+base+leaf+p->getID()+": "+p->getBodyFromAtrList({"NAME"});
+				val += "\n"+base+leaf+p->getProfileWithID();
 				if(p->getFAMC()){if(p->getFAMC()->getWID()!=""){
-					val = val+ generateAncestryView(p->getFAMC()->getWIFE(),base+branch,branch,leaf,air,0);
+					val += generateAncestryView(p->getFAMC()->getWIFE(),base+branch,branch,leaf,air,0);
 				}}
 				
 			}else if(gend==0){
@@ -405,9 +443,10 @@ class genealogicalTree{
 				if(p->getFAMC()){if(p->getFAMC()->getHID()!=""){
 				    val += generateAncestryView(p->getFAMC()->getHUSB(),base+branch,branch,leaf,air,1);
 				}}
-				val = val+"\n"+base+leaf+p->getID()+": "+p->getBodyFromAtrList({"NAME"});
+				val += "\n"+base+leaf+p->getProfileWithID();
+				
 				if(p->getFAMC()){if(p->getFAMC()->getWID()!=""){
-					val = val+ generateAncestryView(p->getFAMC()->getWIFE(),base+air,branch,leaf,air,0);
+					val+= generateAncestryView(p->getFAMC()->getWIFE(),base+air,branch,leaf,air,0);
 				}}
 			}
 			return val;
@@ -415,26 +454,26 @@ class genealogicalTree{
 		
 		string generateDescendancyView(Person *p,string base,string branch,string leaf,string air,string recent){
 			
-			string val = "\n"+base+leaf+p->getID()+": "+p->getBodyFromAtrList({"NAME"});
+			string val = "\n"+base+leaf+p->getProfileWithID();
 			//cout<<"test:"<<val<<"\n";
 			if(p->getFAMS().size()!=0){
 				//cout<<"Passed FAMS";
 				for(int j=0;j<p->getFAMS().size();j++){
 					
 					if(p->getFAMS()[j]->getWIFE()->getID()!=p->getID()){
-						val = val+"\n"+base+"  -"+p->getFAMS()[j]->getWIFE()->getID()+": "+p->getFAMS()[j]->getWIFE()->getBodyFromAtrList({"NAME"});
+						val += "\n"+base+"  -"+p->getFAMS()[j]->getWIFE()->getProfileWithID();
 					}
 					if(p->getFAMS()[j]->getHUSB()->getID()!=p->getID()){
-						val = val+"\n"+base+"  -"+p->getFAMS()[j]->getHUSB()->getID()+": "+p->getFAMS()[j]->getHUSB()->getBodyFromAtrList({"NAME"});
+						val += "\n"+base+"  -"+p->getFAMS()[j]->getHUSB()->getProfileWithID();
 					}
 					for(int i =0;i<p->getFAMS()[j]->CHIL.size();i++){
 						//cout<<"Chil"<<i;
 						if(p->getFAMS()[0]->CHIL[i]){
 							//cout<<"Passed CHIL";
 							if(i==p->getFAMS()[j]->CHIL.size()-1){
-								val = val + generateDescendancyView(p->getFAMS()[j]->CHIL[i],base+recent,branch,leaf,air,air);
+								val += generateDescendancyView(p->getFAMS()[j]->CHIL[i],base+recent,branch,leaf,air,air);
 							}else{
-								val = val + generateDescendancyView(p->getFAMS()[j]->CHIL[i],base+recent,branch,leaf,air,branch);
+								val += generateDescendancyView(p->getFAMS()[j]->CHIL[i],base+recent,branch,leaf,air,branch);
 							}
 								
 						}
@@ -449,15 +488,45 @@ class genealogicalTree{
 	 
 		
 		//Displays
+
+		void displaySourceFileSuccessPage(){
+			
+			system("cls");
+			system("clear");
+			//display Graphics
+			cout<<fancyDisplayBoxes({
+				"Source File Success Page"
+			},20);
+			cout<<fancyDisplayBoxes({
+				"Set to:",
+				sourceFileName,
+				"Options"
+			},40);
+			cout<<fancyDisplayBoxes({
+				"To go to main menu press \"0\""
+			},60)<<">";
+			
+			//handle input
+			int input;
+			cin>>input;
+			if(input==0){
+				displayMainMenu();
+			}else{
+				displayFailurePage("Entered Invalid Option");
+			}
+		}
 		
 		void displaySourceFileSetPage(){
 			
 			system("cls");
-			
+			system("clear");
 			//display Graphics
 			cout<<fancyDisplayBoxes({
 				"Source File Set Page"
 			},20);
+			cout<<fancyDisplayBoxes({
+				"Options"
+			},40);
 			cout<<fancyDisplayBoxes({
 				"To go to main menu press \"0\"",
 				"Otherwise enter new tree path below"
@@ -469,13 +538,16 @@ class genealogicalTree{
 			if(input=="0"){
 				displayMainMenu();
 			}else{
-				
+				sourceFileName=input;
+				displaySourceFileSuccessPage();
 			}
 		}
+
+		
 	 
 		void displayProfilePage(Person *p){
 			system("cls");
-			
+			system("clear");
 			//get basic profile data
 			vector<string> profileHeaders = {
 				"Name: "+p->getBodyFromAtrList({"NAME"}),
@@ -571,7 +643,7 @@ class genealogicalTree{
 		
 		void displayRawProfilePage(Person *p){
 			system("cls");
-			
+			system("clear");
 			//display Graphics
 			cout<<fancyDisplayBoxes({
 				"Raw Profile Page"
@@ -600,7 +672,7 @@ class genealogicalTree{
 		
 		void displayFailurePage(string message){
 			system("cls");
-			
+			system("clear");
 			//display Graphics
 			cout<<"Failure. Details: "<<message+"\n";
 			cout<<fancyDisplayBoxes({
@@ -622,7 +694,7 @@ class genealogicalTree{
 		
 		void displayFailurePage(string message,Person *p){
 			system("cls");
-			
+			system("clear");
 			//display Graphics
 			cout<<"Failure. Details: "<<message+"\n";
 			cout<<fancyDisplayBoxes({
@@ -647,7 +719,7 @@ class genealogicalTree{
 		
 		void displayAncestryPage(Person *p){
 			system("cls");
-			
+			system("clear");
 			//display Graphics
 			cout<<fancyDisplayBoxes({
 				"Ancestry Page"
@@ -676,7 +748,7 @@ class genealogicalTree{
 		
 		void displayDescendancyPage(Person *p){
 			system("cls");
-			
+			system("clear");
 			//display Graphics
 			cout<<fancyDisplayBoxes({
 				"Descendany Page"
@@ -707,7 +779,7 @@ class genealogicalTree{
 		
 		void displayChildrenPage(Person *p){
 			system("cls");
-			
+			system("clear");
 			if(p->getFAMS().size()!=0){
 				
 				//generate children results array
@@ -773,7 +845,7 @@ class genealogicalTree{
 		}
 		
 		void displaySearchPage(){
-			
+			system("clear");
 			system("cls");
 			
 			//display Graphics
@@ -800,7 +872,7 @@ class genealogicalTree{
 		
 		void displaySearchResultPage(string searchTerm){
 			system("cls");
-			
+			system("clear");
 			//generate search results array
 			vector<string> results;
 			vector<Person> resultsPeople;
@@ -846,6 +918,7 @@ class genealogicalTree{
 			
 		void displayMainMenu(){
 			system("cls");
+			system("clear");
 			
 			//display Graphics
 			cout<<fancyDisplayBoxes({
@@ -856,7 +929,7 @@ class genealogicalTree{
 			},40);
 			cout<<fancyDisplayBoxes({
 				"1: Go to Search Page",
-				"2: Leave Tree"
+				"2: Go to Startup Page"
 			},60)<<">";
 			
 			//handle input
@@ -865,7 +938,7 @@ class genealogicalTree{
 			if(input=="1"){
 				displaySearchPage();
 			}if(input=="2"){
-				startup();
+				startup("");
 			}else{
 				displayFailurePage("Entered invalid Option");
 			}
@@ -884,7 +957,6 @@ string fancyDisplayBoxes(vector<string> headers,int width){
 	}
 	return val;
 }
-
 string stringNTimes(string input,int count){
 	string val;
 	for(int i=0;i<count;i++){
@@ -894,10 +966,10 @@ string stringNTimes(string input,int count){
 }
 
 
-//currently not used
-void startup(){
-	system("cls");
-	genealogicalTree startupTree = genealogicalTree();		
+void startup(string fileName){
+	
+	genealogicalTree startupTree = genealogicalTree();	
+	startupTree.setSourceFileName(fileName);	
 	//display Graphics
 	cout<<fancyDisplayBoxes({
 		"Startup"
@@ -907,38 +979,45 @@ void startup(){
 	},40);
 	cout<<fancyDisplayBoxes({
 		"1: Shut Down",
-		"2: Load Default Tree",
-		"3: Set Tree Path",
-		"4: Open Tree"
+		"2: Initialize and Open Tree",
+		"3: Set Tree Path"
 	},60)<<">";
-	/**
-	if(input=="1"){
-		return 0;
-	}if(input=="2"){
-		startup();
-	}**/
+	int option;
+	cin>>option;
+	if(option==1){
+		return;
+	}else if(option==2){
+		startupTree.parseFile();
+		startupTree.createUnlinkedTree();
+		startupTree.linkTreeObjects();
+		startupTree.displayMainMenu();
+	}else if(option==3){
+		startupTree.displaySourceFileSetPage();
+	}
+}
+
+void helpPage(){
+	cout<<"Runs TreeX Gedcom File Viewer.\n";
+	cout<<"Usage:	treeX view <path>\n";
+	cout<<"			treeX [--help | -h | /? | /help]\n";
 }
 
 
 
-
-
-#include <string>
-int main() {
-	
-	//genealogicalTree defaultTree = genealogicalTree();
-	//defaultTree.displayMainMenu();
-	//transition to startup fx soon
-	
-	genealogicalTree myTree = genealogicalTree();
-	myTree.setSourceFileName("mytree.txt");
-	myTree.parseFile();
-	myTree.createUnlinkedTree();
-	myTree.linkTreeObjects();
-	myTree.displayMainMenu();
-
-	
-    return 0;
+int main (int argc, const char * argv[]) {
+	if(argc<2){
+		startup("");
+	}else if(strcmp(argv[1],"view")==0){
+		if(argc==3){
+			startup(argv[2]);
+		}else{
+			cout<<"No valid filename provided.(cannot contain spaces)\n";
+			helpPage();
+		}
+	}else if(!(strcmp(argv[2],"--help")&&strcmp(argv[2],"-h")&&strcmp(argv[2],"/?")&&strcmp(argv[2],"/help"))){
+		cout<<"Invalid Option Provided\n";
+		helpPage();
+	}
 }
 
 
